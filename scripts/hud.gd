@@ -32,9 +32,14 @@ var _big_sub: Label
 var _big_t := 0.0
 var _flash: ColorRect
 var _lobby: PanelContainer
-var _lobby_list: VBoxContainer
+var _lobby_list: GridContainer
 var _lobby_host: VBoxContainer
 var _lobby_wait: Label
+var _room_title: Label
+var _room_sub: Label
+var _invite: Button
+var _lobby_count: Label
+var _results_count: Label
 var _results: PanelContainer
 var _results_grid: GridContainer
 var _results_title: Label
@@ -187,14 +192,23 @@ func _build_center() -> void:
 
 func _build_lobby() -> void:
 	_lobby = UI.panel()
-	_lobby.custom_minimum_size = Vector2(560, 0)
+	_lobby.custom_minimum_size = Vector2(620, 0)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
 	_lobby.add_child(v)
-	v.add_child(UI.label("THE LOBBY", 44, UI.LED, UI.display))
-	v.add_child(UI.label("Everyone in the cab. Floor 40.", 24, UI.MUTED))
-	_lobby_list = VBoxContainer.new()
-	_lobby_list.add_theme_constant_override("separation", 2)
+	_room_title = UI.label("THE LOBBY", 44, UI.LED, UI.display)
+	v.add_child(_room_title)
+	_room_sub = UI.label("Everyone in the cab. Floor 40.", 24, UI.MUTED)
+	_room_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(_room_sub)
+	_invite = UI.button("Invite Steam friends", func(): Lobby.invite_friends())
+	v.add_child(_invite)
+	_lobby_count = UI.label("", 30, UI.INK, UI.bold)
+	v.add_child(_lobby_count)
+	_lobby_list = GridContainer.new()
+	_lobby_list.columns = 2
+	_lobby_list.add_theme_constant_override("h_separation", 24)
+	_lobby_list.add_theme_constant_override("v_separation", 2)
 	v.add_child(_lobby_list)
 	_lobby_host = VBoxContainer.new()
 	_lobby_host.add_theme_constant_override("separation", 10)
@@ -205,14 +219,18 @@ func _build_lobby() -> void:
 	bots.add_child(UI.button("  −  ", func(): bots_changed.emit(-1)))
 	bots.add_child(UI.button("  +  ", func(): bots_changed.emit(1)))
 	_lobby_host.add_child(bots)
-	_lobby_host.add_child(UI.button("Start the round  (Enter)", func(): start_pressed.emit()))
+	_lobby_host.add_child(UI.button("Start now  (Enter)", func(): start_pressed.emit()))
 	var addr := UI.label("", 22, UI.MUTED)
 	addr.name = "Addr"
 	addr.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_lobby_host.add_child(addr)
 	_lobby_wait = UI.label("Waiting for the host to start the round.", 26, UI.MUTED)
 	v.add_child(_lobby_wait)
-	_place(_lobby, Control.PRESET_CENTER_LEFT)
+	_root.add_child(_lobby)
+	_lobby.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_lobby.position = Vector2(28, 290)  # under the floor display
+	_lobby.size = Vector2(620, 0)
+	_lobby.resized.connect(func(): _lobby.size.y = _lobby.get_combined_minimum_size().y)
 
 
 func _build_results() -> void:
@@ -232,6 +250,9 @@ func _build_results() -> void:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 16)
+	_results_count = UI.label("", 26, UI.MUTED, UI.bold)
+	_results_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(_results_count)
 	_next_btn = UI.button("Next round  (Enter)", func(): start_pressed.emit())
 	row.add_child(_next_btn)
 	row.add_child(UI.button("Leave", func(): leave_pressed.emit()))
@@ -294,7 +315,7 @@ func refresh_players() -> void:
 		row.add_child(sw)
 		var tag := "  (bot)" if d.bot else ("  (host)" if id == 1 else "")
 		var you := "  ← you" if id == game.me else ""
-		row.add_child(UI.label("  " + d.name + tag + you, 26, UI.INK if not d.bot else UI.MUTED, UI.bold))
+		row.add_child(UI.label("  " + d.name + tag + you, 22, UI.INK if not d.bot else UI.MUTED, UI.bold))
 		_lobby_list.add_child(row)
 
 
@@ -305,10 +326,23 @@ func on_phase() -> void:
 	_lobby.visible = lobby
 	_lobby_host.visible = lobby and game.multiplayer.is_server()
 	_lobby_wait.visible = lobby and not game.multiplayer.is_server()
-	if lobby and game.multiplayer.is_server():
+	var steam_room := Lobby.lobby_id != 0
+	_invite.visible = lobby and steam_room
+	match Lobby.mode:
+		"code":
+			_room_title.text = "ROOM  %s" % Lobby.code
+			_room_sub.text = "Friends type %s under Play with friends, or you can invite them on Steam." % Lobby.code
+		"quick":
+			_room_title.text = "QUICKPLAY"
+			_room_sub.text = "Other players are joining. Bots keep the seats warm until they do."
+		_:
+			_room_title.text = "THE LOBBY"
+			_room_sub.text = "Everyone in the cab. Floor 40."
+	var addr := _lobby_host.get_node("Addr") as Label
+	addr.visible = not steam_room
+	if lobby and game.multiplayer.is_server() and not steam_room:
 		var a: Array[String] = Net.local_addresses()
-		var addr := _lobby_host.get_node("Addr") as Label
-		addr.text = "Friends join with:  %s" % (", ".join(a) if not a.is_empty() else "this computer's IP address")
+		addr.text = "Friends on your Wi-Fi join with:  %s" % (", ".join(a) if not a.is_empty() else "this computer's IP address")
 	if game.phase != "results":
 		_results.visible = false
 
@@ -416,6 +450,16 @@ func update_hud(dt: float) -> void:
 	_riding.text = "%d / %d riding" % [g.alive_count(), g.players.size()]
 	_haul.text = "Your haul  %d" % g.my_haul()
 	_round.text = "Round %d" % g.round_no if g.round_no > 0 else "Waiting to start"
+	var people := 0
+	for d in g.info.values():
+		if not d.bot:
+			people += 1
+	if g.countdown >= 0.0:
+		_lobby_count.text = "Starting in %d" % int(ceil(g.countdown))
+		_results_count.text = "Next round in %d" % int(ceil(g.countdown))
+	else:
+		_lobby_count.text = ("Waiting for one more person… (%d here)" % people) if Lobby.mode == "quick" else ""
+		_results_count.text = ""
 	var limit := Rules.CAB_LIMIT_KG
 	_load_label.text = "CAB LOAD  %d / %d kg" % [int(g.cab_kg), int(limit)]
 	_load_fill.size.x = 380.0 * clampf(g.cab_kg / limit, 0.0, 1.0)

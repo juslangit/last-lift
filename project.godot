@@ -12,6 +12,7 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 
 Net="*res://scripts/net.gd"
 Sound="*res://scripts/sound.gd"
+Lobby="*res://scripts/lobby.gd"
 
 [display]
 

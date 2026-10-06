@@ -22,6 +22,7 @@ var waiting_weight := false
 var cab_kg := 0.0
 var round_no := 0
 var totals := {}                  # player id -> points over the session
+var countdown := -1.0             # Quickplay: seconds until the next round starts, -1 if none
 
 var info := {}                    # player id -> {name, color, bot}
 var players := {}                 # player id -> Player
@@ -242,7 +243,7 @@ func s_register(display_name: String) -> void:
 	var state := {
 		"phase": phase, "floor": floor_now, "from": floor_from, "next": floor_next, "time": time_left,
 		"kind": room_kind, "seed": room_seed, "hold": hold_used, "loot": loot_list, "totals": totals,
-		"round": round_no, "stage": room.stage if room else 0,
+		"round": round_no, "stage": room.stage if room else 0, "countdown": countdown,
 	}
 	c_welcome.rpc_id(id, info, _alive_map(), state)
 	_broadcast_players()
@@ -264,6 +265,7 @@ func c_welcome(all: Dictionary, alive: Dictionary, state: Dictionary) -> void:
 			players[id].set_alive(alive[id])
 	totals = state.totals
 	round_no = state.round
+	countdown = state.get("countdown", -1.0)
 	_apply_phase(state.phase, state.from, state.next, state.time, state.kind, state.seed)
 	floor_now = state.floor
 	hold_used = state.hold
@@ -398,6 +400,7 @@ func _bake_nav() -> void:
 
 func _send_phase(p: String, from: int, to: int, dur: float, kind := "", seed_value := 0) -> void:
 	_apply_phase(p, from, to, dur, kind, seed_value)
+	Lobby.set_state("lobby" if p == "lobby" or p == "results" else "playing")
 	for pid in _ready_peers:
 		c_phase.rpc_id(pid, p, from, to, dur, kind, seed_value)
 
@@ -414,6 +417,7 @@ func _on_start() -> void:
 
 func _srv_start_round() -> void:
 	round_no += 1
+	_set_countdown(-1.0)
 	_stops = Rules.floor_plan(_rng)
 	_stop_i = 0
 	for lid in loot.keys():
@@ -629,6 +633,8 @@ func _srv_tick(dt: float) -> void:
 	match phase:
 		"lobby":
 			_auto_t += dt
+			if Lobby.mode == "quick":
+				_quick_lobby(dt)
 			if Net.flag("autostart") and _auto_t > 1.5:
 				var need := 1
 				if Net.opts["autostart"] is String:
@@ -667,12 +673,46 @@ func _srv_tick(dt: float) -> void:
 				_srv_results()
 		"results":
 			_auto_t += dt
+			if Lobby.mode == "quick":
+				if countdown < 0.0:
+					_set_countdown(Rules.QUICK_NEXT)
+				_set_countdown(countdown - dt)
+				if countdown <= 0.0:
+					_srv_start_round()
+					return
 			var rounds := int(Net.opts.get("rounds", 0))
 			if rounds > 0 and _auto_t > 3.0:
 				if round_no < rounds:
 					_srv_start_round()
 				elif Net.flag("quit") and _auto_t > 4.0:
 					get_tree().quit()
+
+
+## Quickplay rooms start themselves: a countdown once a second person arrives.
+func _quick_lobby(dt: float) -> void:
+	var humans := _humans()
+	if humans < 2:
+		_set_countdown(-1.0)
+		return
+	var t := countdown if countdown >= 0.0 else Rules.QUICK_WAIT
+	if humans >= Rules.FULL_CAB:
+		t = minf(t, Rules.QUICK_FULL_WAIT)
+	_set_countdown(t - dt)
+	if countdown <= 0.0:
+		_srv_start_round()
+
+
+func _set_countdown(t: float) -> void:
+	var before := int(ceil(countdown))
+	countdown = t
+	if int(ceil(t)) != before:
+		for pid in _ready_peers:
+			c_countdown.rpc_id(pid, t)
+
+
+@rpc("authority", "call_remote", "reliable")
+func c_countdown(t: float) -> void:
+	countdown = t
 
 
 func _humans() -> int:

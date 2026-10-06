@@ -26,3 +26,7 @@
 | fire.ogg | Sci-fi Sounds — thrusterFire_000 |
 
 All 3D models are built in code from primitives (scripts/body.gd, cab.gd, room.gd).
+
+## Steam
+- **GodotSteam 4.23** GDExtension (MIT) — `addons/godotsteam/`, licence in `license.md`. Steamworks SDK 1.65 (`libsteam_api`), redistributed under the Steamworks SDK terms.
+- Development uses Valve's test app ID 480 (Spacewar), set in `steam_appid.txt` and `scripts/lobby.gd`.

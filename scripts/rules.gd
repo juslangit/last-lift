@@ -18,6 +18,9 @@ const DOOR_ANIM := 0.8           # seconds for the doors to slide
 const DESCENT_TIME := 5.0
 const CRASH_TIME := 4.0
 const OVERWEIGHT_GRACE := 6.0    # how long the doors refuse to close before the cable gives
+const QUICK_WAIT := 20.0         # Quickplay: once two people are in, the round starts after this
+const QUICK_FULL_WAIT := 5.0     # ...or this, once the cab is full of people
+const QUICK_NEXT := 12.0         # Quickplay: the next round starts this long after the results
 
 # --- the cab -----------------------------------------------------------------------------
 # Interior: x in [-CAB_HALF_W, CAB_HALF_W], z in [0, CAB_DEPTH]. The doors sit on z = 0 and

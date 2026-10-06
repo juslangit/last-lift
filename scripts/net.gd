@@ -1,7 +1,8 @@
 extends Node
 
 ## The connection, and the options the game was started with.
-## One player hosts (peer id 1) and is the authority for everything; the others join by IP.
+## One player hosts (peer id 1) and is the authority for everything. Over Steam (scripts/lobby.gd)
+## the peer is a SteamMultiplayerPeer; on the same Wi-Fi it is ENet by IP.
 
 signal joined                    # a client reached the host
 signal failed(reason: String)    # could not connect, or the host went away
@@ -50,10 +51,16 @@ func join(address: String, port := Rules.PORT) -> String:
 	return ""
 
 
+## Use a peer made elsewhere (the Steam lobby code makes SteamMultiplayerPeers).
+func use_peer(peer: MultiplayerPeer) -> void:
+	multiplayer.multiplayer_peer = peer
+
+
 func leave() -> void:
 	if multiplayer.multiplayer_peer:
 		multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+	Lobby.leave()
 
 
 func is_host() -> bool:
