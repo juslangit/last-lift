@@ -1,0 +1,31 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+
+config/name="Last Lift"
+config/description="An online party game for up to 12 players. A skyscraper elevator falls floor by floor; the doors open for fourteen seconds on a random room. Grab loot and get back in before they shut."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+
+[autoload]
+
+Net="*res://scripts/net.gd"
+Sound="*res://scripts/sound.gd"
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/size/mode=2
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[physics]
+
+common/physics_ticks_per_second=60
+
+[rendering]
+
+anti_aliasing/quality/msaa_3d=2
+lights_and_shadows/directional_shadow/size=2048
