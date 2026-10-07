@@ -210,7 +210,10 @@ func _build_lobby() -> void:
 	_room_sub = UI.label("Everyone in the cab. Floor 40.", 24, UI.MUTED)
 	_room_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(_room_sub)
-	_invite = UI.button("Invite Steam friends", func(): Lobby.invite_friends())
+	_invite = UI.button("Invite Steam friends", func():
+		var said := Lobby.invite_friends()
+		if said != "":
+			feed(said))
 	v.add_child(_invite)
 	_lobby_count = UI.label("", 30, UI.INK, UI.bold)
 	v.add_child(_lobby_count)
@@ -418,10 +421,12 @@ func on_phase() -> void:
 	_lobby_wait.visible = lobby and not game.multiplayer.is_server()
 	var steam_room := Lobby.lobby_id != 0
 	_invite.visible = lobby and steam_room
+	_invite.text = "Copy invite link" if Lobby.web else "Invite Steam friends"
 	match Lobby.mode:
 		"code":
 			_room_title.text = "ROOM  %s" % Lobby.code
-			_room_sub.text = "Friends type %s under Play with friends, or you can invite them on Steam." % Lobby.code
+			_room_sub.text = ("Friends type %s under Play with friends, or send them %s" % [Lobby.code, Lobby.invite_link()]) if Lobby.web \
+				else "Friends type %s under Play with friends, or you can invite them on Steam." % Lobby.code
 		"quick":
 			_room_title.text = "QUICKPLAY"
 			_room_sub.text = "Other players are joining. Bots keep the seats warm until they do."
@@ -490,7 +495,7 @@ func show_results(rows: Array) -> void:
 
 func hide_results() -> void:
 	_results.visible = false
-	if DisplayServer.get_name() != "headless" and not paused:
+	if DisplayServer.get_name() != "headless" and not paused and not OS.has_feature("web"):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
@@ -577,6 +582,8 @@ func update_hud(dt: float) -> void:
 			_slot_boxes[i].modulate = Color(1, 1, 1, 0.5)
 	var it := g.interact_target()
 	_prompt.text = ("[E]  " + it.text) if it.type == "loot" or it.type == "hold" else it.get("text", "")
+	if Lobby.web and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not paused and g.phase != "results":
+		_prompt.text = "Click the game to grab the mouse"
 	var ghosting := _update_ghost(g)
 	_hands.visible = not ghosting
 	_spectate.visible = lp != null and not lp.alive and not ghosting and g.phase != "lobby" and g.phase != "results"

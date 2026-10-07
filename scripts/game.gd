@@ -104,7 +104,8 @@ func _ready() -> void:
 	else:
 		_apply_phase("lobby", Rules.START_FLOOR, Rules.START_FLOOR, 0.0, "", 0)
 		s_register.rpc_id(1, Net.my_name)
-	if not DisplayServer.get_name() == "headless":
+	# browsers only lock the mouse on a click, which _unhandled_input handles
+	if DisplayServer.get_name() != "headless" and not OS.has_feature("web"):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
@@ -1268,6 +1269,7 @@ func _draw_ghosts() -> void:
 		if not haunts.has(gid) or not players.has(haunts[gid]):
 			_ghost_nodes[gid].queue_free()
 			_ghost_nodes.erase(gid)
+	_ghosts_root.visible = phase != "results" and phase != "lobby"
 	var count := {}
 	for gid in haunts:
 		var target: int = haunts[gid]

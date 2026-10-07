@@ -13,13 +13,21 @@ var opts := {}                   # command-line flags: --host, --join=IP, --bots
 
 
 func _ready() -> void:
-	for arg in OS.get_cmdline_user_args():
-		var a := arg.trim_prefix("--")
+	var args := Array(OS.get_cmdline_user_args())
+	if OS.has_feature("web"):  # in a browser the options come from the address: ?room=4821&name=Ana
+		var q := str(JavaScriptBridge.eval("location.search")).trim_prefix("?")
+		for part in q.split("&", false):
+			args.append(part.uri_decode())
+	for arg in args:
+		var a: String = arg.trim_prefix("--")
 		var eq := a.find("=")
 		if eq >= 0:
 			opts[a.substr(0, eq)] = a.substr(eq + 1)
 		else:
 			opts[a] = true
+	if opts.has("room"):  # an invite link
+		opts["code"] = opts["room"]
+		opts.erase("room")
 	if opts.has("name"):
 		my_name = str(opts["name"])
 	if opts.has("bots"):

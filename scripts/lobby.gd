@@ -1,5 +1,8 @@
 extends Node
 
+## Matchmaking: Quickplay, 4-digit room codes and invites. On the desktop build it is Steam;
+## in a browser it is the Last Lift relay and WebRTC (scripts/relay.gd), with invite links.
+##
 ## Steam matchmaking: Quickplay, 4-digit room codes and Steam invites.
 ## Every match is a Steam lobby (so it can be found and joined) plus a SteamMultiplayerPeer
 ## between the members and the lobby's owner, who hosts the game. Steam relays the traffic,
@@ -31,9 +34,14 @@ var is_host := false
 var _search := ""
 var _candidates: Array = []
 var _code_tries := 0
+var web := false                 # running in a browser: the relay instead of Steam
+var relay: Relay
 
 
 func _ready() -> void:
+	if OS.has_feature("web"):
+		_start_web()
+		return
 	if Net.flag("nosteam") or DisplayServer.get_name() == "headless":
 		why_not = "Steam is switched off for this run."
 		return
@@ -71,6 +79,12 @@ func connect_steam() -> bool:
 # --- what the menu calls -----------------------------------------------------------------
 
 func quickplay() -> void:
+	if web:
+		leave()
+		mode = "quick"
+		status.emit("Looking for a game…")
+		relay.send({"t": "quick", "ver": PROTOCOL})
+		return
 	if not _ready_check():
 		return
 	mode = "quick"
@@ -79,6 +93,12 @@ func quickplay() -> void:
 
 
 func create_room() -> void:
+	if web:
+		leave()
+		mode = "code"
+		status.emit("Making a room…")
+		relay.send({"t": "host", "mode": "code", "name": Net.my_name, "ver": PROTOCOL})
+		return
 	if not _ready_check():
 		return
 	mode = "code"
@@ -87,11 +107,18 @@ func create_room() -> void:
 
 
 func join_code(c: String) -> void:
-	if not _ready_check():
-		return
 	c = c.strip_edges()
 	if c.length() != 4 or not c.is_valid_int():
 		failed.emit("Room codes are 4 numbers, like 4821.")
+		return
+	if web:
+		leave()
+		mode = "code"
+		code = c
+		status.emit("Looking for room %s…" % c)
+		relay.send({"t": "join", "code": c, "ver": PROTOCOL})
+		return
+	if not _ready_check():
 		return
 	mode = "code"
 	code = c
@@ -109,19 +136,41 @@ func accept_invite(id: int) -> void:
 	steam.joinLobby(id)
 
 
-func invite_friends() -> void:
+## Steam: open the invite overlay. Browser: copy a link that drops a friend into this room.
+## Returns a line for the HUD to show ("" for nothing).
+func invite_friends() -> String:
+	if web:
+		var link := invite_link()
+		if link == "":
+			return ""
+		DisplayServer.clipboard_set(link)
+		return "Invite link copied: " + link
 	if ok and lobby_id != 0:
 		steam.activateGameOverlayInviteDialog(lobby_id)
+	return ""
+
+
+func invite_link() -> String:
+	if not web or code == "":
+		return ""
+	var here = JavaScriptBridge.eval("location.origin + location.pathname")
+	return "%s?room=%s" % [str(here), code]
 
 
 ## The host keeps the lobby's listing current, so Quickplay prefers rooms still waiting.
 func set_state(state: String) -> void:
+	if web:
+		if is_host:
+			relay.send({"t": "state", "state": state})
+		return
 	if ok and is_host and lobby_id != 0:
 		steam.setLobbyData(lobby_id, "state", state)
 
 
 func leave() -> void:
-	if ok and lobby_id != 0:
+	if web:
+		relay.close()
+	elif ok and lobby_id != 0:
 		steam.leaveLobby(lobby_id)
 	lobby_id = 0
 	is_host = false
@@ -255,3 +304,41 @@ func _on_joined(id: int, _permissions: int, _locked: bool, response: int) -> voi
 				and expected.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
 			Net.leave()
 			failed.emit("The host didn't answer. Try Quickplay again."))
+
+
+# --- the browser: relay + WebRTC ---------------------------------------------------------
+
+func _start_web() -> void:
+	web = true
+	ok = true
+	why_not = ""
+	relay = Relay.new()
+	add_child(relay)
+	relay.hosted.connect(func(c: String):
+		code = c
+		is_host = true
+		lobby_id = 1
+		if Net.flag("log"):
+			print("[relay] hosting room %s mode=%s" % [c, mode])
+		Net.use_peer(relay.rtc)
+		hosting.emit())
+	relay.none_found.connect(func():
+		status.emit("No open games right now. Starting one; other players will join you.")
+		relay.send({"t": "host", "mode": "quick", "name": Net.my_name, "ver": PROTOCOL}))
+	relay.joined_room.connect(func(c: String, m: String, host_name: String):
+		code = c
+		mode = m
+		lobby_id = 1
+		if Net.flag("log"):
+			print("[relay] joining room %s, host %s" % [c, host_name])
+		status.emit("Connecting to %s…" % (host_name if host_name != "" else "the host"))
+		var peer := relay.rtc
+		Net.use_peer(peer)
+		get_tree().create_timer(20.0).timeout.connect(func():
+			if Net.multiplayer.multiplayer_peer == peer \
+					and peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+				Net.leave()
+				failed.emit("Couldn't connect to the host. Their network may block direct connections.")))
+	relay.failed.connect(func(reason: String):
+		leave()
+		failed.emit(reason))

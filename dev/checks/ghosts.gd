@@ -134,5 +134,7 @@ func _finish() -> void:
 	if _done.has("finished"):
 		return
 	_done["finished"] = true
+	if not _done.has("vault b"):
+		print("  note  the round ended on floor %d (everyone left behind); the later floors' checks did not run" % _floor)
 	print("%d passed, %d failed" % [passes, failures])
 	get_tree().quit(1 if failures > 0 else 0)

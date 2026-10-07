@@ -6,7 +6,7 @@ extends Node
 ## Command line (after --):  --host  --join=IP  --name=X  --bots=N  --autostart[=humans]
 ##                           --autopilot  --rounds=N  --quit  --rooms=office,fire,zoo  --log  --nosteam
 ##                           --snap=always|never
-##                           --quickplay  --room  --code=1234   (press that menu button on start)
+##                           --quickplay  --newroom  --code=1234   (press that menu button on start)
 
 var game: Game
 var menu: Control
@@ -45,10 +45,10 @@ func _ready() -> void:
 			get_tree().quit(1)
 	else:
 		_show_menu("")
-		# test hooks: --quickplay, --room, --code=1234 press the matching menu button
+		# test hooks: --quickplay, --newroom, --code=1234 press the matching menu button
 		if Net.flag("quickplay"):
 			_on_quickplay.call_deferred()
-		elif Net.flag("room"):
+		elif Net.flag("newroom"):
 			_on_create_room.call_deferred()
 		elif Net.opts.has("code"):
 			_on_join_code.call_deferred(str(Net.opts["code"]))
@@ -168,6 +168,8 @@ func _show_menu(message: String) -> void:
 	_home_page()
 	if message != "":
 		_say(message, UI.LED)
+	elif Lobby.web:
+		_say("Click a mode to start. Best with a mouse and keyboard.", UI.MUTED)
 	elif not Lobby.ok:
 		_say("Steam: %s Quickplay and room codes need it." % Lobby.why_not, UI.MUTED)
 	else:
@@ -228,10 +230,12 @@ func _home_page() -> void:
 	var quick := _big_button("QUICKPLAY", "Jump into a lobby with other players", _on_quickplay, true)
 	quick.name = "Quickplay"
 	_page.add_child(quick)
-	_page.add_child(_big_button("PLAY WITH FRIENDS", "Make a room with a 4-digit code, or invite Steam friends", _friends_page))
-	var quit := UI.button("Quit", func(): get_tree().quit())
-	quit.custom_minimum_size = Vector2(780, 0)
-	_page.add_child(quit)
+	_page.add_child(_big_button("PLAY WITH FRIENDS", "Make a room with a 4-digit code, or send an invite link" if Lobby.web
+		else "Make a room with a 4-digit code, or invite Steam friends", _friends_page))
+	if not Lobby.web:  # a browser tab is closed, not quit
+		var quit := UI.button("Quit", func(): get_tree().quit())
+		quit.custom_minimum_size = Vector2(780, 0)
+		_page.add_child(quit)
 
 
 func _friends_page() -> void:
@@ -249,7 +253,8 @@ func _friends_page() -> void:
 	make.add_child(UI.button(" + ", func(): _set_bots(Net.bots + 1)))
 	_page.add_child(make)
 	_set_bots(Net.bots)
-	_page.add_child(UI.label("You get a 4-digit code to give your friends, and can invite Steam friends from the lobby.", 22, UI.MUTED))
+	_page.add_child(UI.label("You get a 4-digit code to give your friends, and can copy an invite link from the lobby." if Lobby.web
+		else "You get a 4-digit code to give your friends, and can invite Steam friends from the lobby.", 22, UI.MUTED))
 	var join := HBoxContainer.new()
 	join.add_theme_constant_override("separation", 12)
 	var code := LineEdit.new()
@@ -264,6 +269,11 @@ func _friends_page() -> void:
 	jb.custom_minimum_size = Vector2(220, 64)
 	join.add_child(jb)
 	_page.add_child(join)
+	if Lobby.web:  # no Steam invites, and browsers can't join by IP
+		var back_web := UI.button("Back", _home_page)
+		back_web.custom_minimum_size = Vector2(200, 0)
+		_page.add_child(back_web)
+		return
 	_page.add_child(UI.label("Got a Steam invite? Accept it in Steam and you'll join automatically.", 22, UI.MUTED))
 	# same Wi-Fi without Steam
 	var lan := HBoxContainer.new()

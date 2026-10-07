@@ -1,0 +1,13 @@
+# Last Lift relay: room codes, Quickplay matchmaking and WebRTC signalling for the web game.
+# Deploy: npx wrangler deploy   (CLOUDFLARE_API_TOKEN from ~/.claude/.env)
+name = "last-lift-relay"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "Lobby"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Lobby"]
