@@ -57,6 +57,47 @@ static func gorilla() -> Node3D:
 	return root
 
 
+## A ghost: a pale sheet with a round top, two dark eyes and a ragged hem, tinted with the
+## colour its player wore. Unshaded and see-through so it reads in any light.
+static func ghost(tint: Color) -> Node3D:
+	var root := Node3D.new()
+	root.scale = Vector3.ONE * 0.75
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.85, 0.92, 1.0, 0.42).lerp(Color(tint, 0.42), 0.35)
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.emission_enabled = true
+	m.emission = m.albedo_color
+	m.emission_energy_multiplier = 0.6
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	root.set_meta("mat", m)
+	var sheet := CylinderMesh.new()
+	sheet.top_radius = 0.3
+	sheet.bottom_radius = 0.42
+	sheet.height = 0.8
+	sheet.radial_segments = 12
+	Build.mesh(root, sheet, Vector3(0, 0.4, 0), m)
+	Build.mesh(root, Build.sphere_mesh(0.3), Vector3(0, 0.8, 0), m)
+	for i in 6:  # the ragged hem
+		var a := i * TAU / 6.0
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.1
+		cone.bottom_radius = 0.0
+		cone.height = 0.22
+		cone.radial_segments = 5
+		Build.mesh(root, cone, Vector3(cos(a) * 0.32, -0.1, sin(a) * 0.32), m)
+	var eye := Build.mat(Color("101418"), 0.5)
+	for x in [-0.1, 0.1]:
+		Build.mesh(root, Build.sphere_mesh(0.06, 0.1), Vector3(x, 0.86, -0.26), eye)
+	return root
+
+
+static func ghost_glow(g: Node3D, energy: float) -> void:
+	var m := g.get_meta("mat") as StandardMaterial3D
+	if m:
+		m.emission_energy_multiplier = lerpf(m.emission_energy_multiplier, energy, 0.1)
+
+
 ## Walk cycle on a body made above: bob and waddle by distance travelled.
 static func animate(body: Node3D, speed: float, phase: float) -> void:
 	var bob := body.get_node_or_null("Bob") as Node3D

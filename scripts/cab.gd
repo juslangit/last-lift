@@ -18,6 +18,7 @@ var hold_lamp: MeshInstance3D
 var hold_pos := Vector3(1.62, 1.25, 0.2)
 var open_amount := 0.0           # 0 shut, 1 fully open
 var flicker := 0.0               # set by the game during descent
+var blackout := 0.0              # a ghost killed the lights: seconds left
 var _tween: Tween
 var _font: Font
 
@@ -126,11 +127,17 @@ func set_hold_used(used: bool) -> void:
 	(hold_lamp.material_override as StandardMaterial3D).emission_energy_multiplier = 0.2 if used else 2.5
 
 
-func _process(_dt: float) -> void:
+func _process(dt: float) -> void:
 	var base := 2.2
 	var strip := 2.0
+	blackout = maxf(blackout - dt, 0.0)
 	if flicker > 0.0 and randf() < flicker * 0.25:
 		base *= randf_range(0.05, 0.6)
 		strip *= 0.2
+	if blackout > 0.0:
+		base = 0.0 if randf() > 0.04 else 0.8
+		strip = 0.0
 	lamp.light_energy = lerpf(lamp.light_energy, base, 0.5)
+	for l in [led_in, led_out]:
+		(l as Label3D).visible = blackout <= 0.0
 	(lamp_strip.material_override as StandardMaterial3D).emission_energy_multiplier = strip

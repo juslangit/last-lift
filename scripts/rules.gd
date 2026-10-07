@@ -22,6 +22,24 @@ const QUICK_WAIT := 20.0         # Quickplay: once two people are in, the round 
 const QUICK_FULL_WAIT := 5.0     # ...or this, once the cab is full of people
 const QUICK_NEXT := 12.0         # Quickplay: the next round starts this long after the results
 
+# --- cable snap: the cab drops between floors; hold a rail or lose half your loot ---------
+const SNAP_CHANCE := 0.85        # chance a round has one snap
+const SNAP_AT := 1.0             # seconds into the descent the cable goes
+const SNAP_GRAB := 2.2           # seconds to get a grip before the emergency brake bites
+const SNAP_EXTRA := 3.0          # a snapping descent lasts this much longer
+const RAIL_REACH := 0.6          # how close to a rail (m, flat) you must be to hold it
+
+# --- ghosts: the left-behind haunt the living -----------------------------------------------
+const HAUNT_POINTS := 150        # your haunted person gets left behind
+const FLICKER_TIME := 3.0        # lights and the floor clock go dark
+const FLICKER_COOL := 15.0
+const BUTTON_CUT := 3.0          # a ghost presses a floor button: the doors close sooner
+const BUTTON_MIN_LEFT := 3.0     # ...but never sooner than this
+const BUTTON_PER_FLOOR := 3      # presses allowed on one floor, across every ghost
+const SPOOK_TIME := 4.0          # the room's hazard goes for your person this long
+const SPOOK_COOL := 10.0
+const WET_KG := 1.5              # spa loot soaked in the flood weighs this much more
+
 # --- the cab -----------------------------------------------------------------------------
 # Interior: x in [-CAB_HALF_W, CAB_HALF_W], z in [0, CAB_DEPTH]. The doors sit on z = 0 and
 # open onto the room, which is built in negative z.
@@ -52,12 +70,16 @@ const PLAYER_COLORS := [
 const BOT_NAMES := ["Aiko", "Bram", "Cleo", "Dmitri", "Esme", "Faisal", "Gus", "Hana", "Ivo", "Juno", "Kofi"]
 
 # --- rooms and loot ----------------------------------------------------------------------
-const ROOMS := ["office", "fire", "zoo"]
-const ROOM_NAMES := {"office": "Office Party", "fire": "Server Farm Fire", "zoo": "Rooftop Zoo"}
+const ROOMS := ["office", "fire", "zoo", "spa", "vault", "daycare"]
+const ROOM_NAMES := {"office": "Office Party", "fire": "Server Farm Fire", "zoo": "Rooftop Zoo",
+	"spa": "Flooded Spa", "vault": "Laser Vault", "daycare": "Ball Pit Daycare"}
 const ROOM_HAZARDS := {
 	"office": "Conga line on the loose",
 	"fire": "Fire spreads row by row",
 	"zoo": "Escaped gorilla",
+	"spa": "The water is rising. Wet loot is heavier",
+	"vault": "Laser sweep knocks loot out of your hands",
+	"daycare": "Loot is lost in the ball pit. Watch the toddler",
 }
 
 # kind: [display name, value, kg, shape, colour, size]
@@ -78,11 +100,32 @@ const LOOT := {
 	"penguin":     ["Baby penguin", 250, 8.0, "sphere", Color("27272a"), Vector3(0.34, 0.44, 0.34)],
 	"flamingo":    ["Flamingo", 220, 6.0, "cyl", Color("fb7aa8"), Vector3(0.2, 0.8, 0.2)],
 	"panda":       ["Panda plush", 100, 4.0, "sphere", Color("f5f5f4"), Vector3(0.45, 0.45, 0.45)],
+	"towel":       ["Fluffy towel", 60, 1.5, "box", Color("f8fafc"), Vector3(0.45, 0.16, 0.3)],
+	"duck":        ["Golden duck", 350, 1.0, "sphere", Color("facc15"), Vector3(0.3, 0.26, 0.3)],
+	"robe":        ["Silk robe", 140, 3.0, "box", Color("c4b5fd"), Vector3(0.5, 0.12, 0.4)],
+	"oil":         ["Massage oil", 90, 1.0, "cyl", Color("d9a441"), Vector3(0.14, 0.3, 0.14)],
+	"cherub":      ["Marble cherub", 450, 30.0, "cyl", Color("e7e5e4"), Vector3(0.4, 0.8, 0.4)],
+	"jug":         ["Cucumber water", 70, 4.0, "cyl", Color("86efac"), Vector3(0.26, 0.4, 0.26)],
+	"goldbar":     ["Gold bar", 500, 12.0, "box", Color("eab308"), Vector3(0.36, 0.12, 0.18)],
+	"diamond":     ["Diamond", 650, 0.3, "sphere", Color("a5f3fc"), Vector3(0.2, 0.24, 0.2)],
+	"cash":        ["Cash stack", 300, 2.0, "box", Color("4ade80"), Vector3(0.32, 0.16, 0.16)],
+	"painting":    ["Stolen painting", 400, 6.0, "box", Color("b45309"), Vector3(0.7, 0.55, 0.06)],
+	"crown":       ["Crown", 550, 3.0, "cyl", Color("fbbf24"), Vector3(0.3, 0.22, 0.3)],
+	"bonds":       ["Bearer bonds", 220, 0.5, "box", Color("fef3c7"), Vector3(0.3, 0.04, 0.22)],
+	"teddy":       ["Teddy bear", 110, 2.0, "sphere", Color("a16207"), Vector3(0.4, 0.45, 0.4)],
+	"rattle":      ["Silver rattle", 260, 0.5, "cyl", Color("d4d4d8"), Vector3(0.12, 0.3, 0.12)],
+	"blocks":      ["Block tower", 90, 3.0, "box", Color("f87171"), Vector3(0.3, 0.45, 0.3)],
+	"juice":       ["Juice box", 40, 0.3, "box", Color("fb923c"), Vector3(0.12, 0.2, 0.08)],
+	"horse":       ["Rocking horse", 320, 18.0, "box", Color("e11d48"), Vector3(0.8, 0.6, 0.3)],
+	"pacifier":    ["Golden pacifier", 420, 0.2, "sphere", Color("fde047"), Vector3(0.16, 0.14, 0.16)],
 }
 const ROOM_LOOT := {
 	"office": ["cake", "mic", "envelope", "stapler", "cooler", "trophy"],
 	"fire": ["drive", "rig", "router", "blade", "tape"],
 	"zoo": ["egg", "parrot", "penguin", "flamingo", "panda"],
+	"spa": ["towel", "duck", "robe", "oil", "cherub", "jug"],
+	"vault": ["goldbar", "diamond", "cash", "painting", "crown", "bonds"],
+	"daycare": ["teddy", "rattle", "blocks", "juice", "horse", "pacifier"],
 }
 
 
@@ -123,6 +166,38 @@ static func floor_plan(rng: RandomNumberGenerator) -> Array[int]:
 			break
 		stops.append(f)
 	return stops
+
+
+## How many items a jolt shakes out of your hands when you weren't holding a rail: half, rounded up.
+static func snap_drops(carrying: int) -> int:
+	return ceili(carrying / 2.0)
+
+
+## Flat distance from a spot in the cab to the nearest hand rail (side walls and back wall).
+static func rail_distance(pos: Vector3) -> float:
+	var rx := CAB_HALF_W - 0.08
+	var rz := CAB_DEPTH - 0.08
+	var p := Vector2(pos.x, pos.z)
+	var rails := [[Vector2(-rx, 0.3), Vector2(-rx, rz)], [Vector2(rx, 0.3), Vector2(rx, rz)], [Vector2(-rx, rz), Vector2(rx, rz)]]
+	var best := INF
+	for r in rails:
+		best = minf(best, p.distance_to(Geometry2D.get_closest_point_to_segment(p, r[0], r[1])))
+	return best
+
+
+static func can_hold_rail(pos: Vector3) -> bool:
+	return inside_cab(pos) and rail_distance(pos) < RAIL_REACH
+
+
+## The spot on the nearest rail a person at `pos` should stand on to hold it.
+static func rail_spot(pos: Vector3) -> Vector3:
+	var x := CAB_HALF_W - 0.42
+	var z := CAB_DEPTH - 0.42
+	var to_side := x - absf(pos.x)
+	var to_back := z - pos.z
+	if to_back < to_side:
+		return Vector3(clampf(pos.x, -x, x), 0, z)
+	return Vector3(signf(pos.x) * x if absf(pos.x) > 0.01 else x, 0, clampf(pos.z, 0.6, z))
 
 
 static func floor_label(f: int) -> String:

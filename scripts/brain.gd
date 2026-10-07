@@ -21,6 +21,10 @@ var _unstick_dir := Vector3.ZERO
 var _last := Vector3.ZERO
 var _floor_seen := -1
 var _drop_wait := 0.0
+var _ghost_t := 0.0
+var _snap_seen := false
+var _grip_delay := 0.0
+var _frozen := false          # this snap, panics and never reaches for a rail
 
 
 func _init(seed_value: int) -> void:
@@ -42,7 +46,13 @@ func tick(dt: float, p: Player, g: Game) -> void:
 	p.want_run = false
 	p.move_dir = Vector3.ZERO
 	if not p.alive:
+		_ghost(dt, p, g)
 		return
+	if g.snap_active():
+		_hold_on(dt, p, g)
+		return
+	_snap_seen = false
+	p.gripping = false
 	if g.floor_now != _floor_seen and g.phase == "open":
 		_floor_seen = g.floor_now
 		new_floor()
@@ -65,7 +75,7 @@ func tick(dt: float, p: Player, g: Game) -> void:
 				_drop_wait = 0.6
 				g.act_drop(p)
 		return
-	var speed := Rules.RUN_SPEED * Rules.speed_factor(p.carried_kg)
+	var speed := Rules.RUN_SPEED * Rules.speed_factor(p.carried_kg) * p.slow
 	var dist_home := Vector2(p.position.x - home.x, p.position.z - home.z).length() * 1.25
 	var need := dist_home / speed + 1.2 + (1.0 - greed) * 3.0 + misjudge
 	var going_home := g.time_left < need or p.carried.size() >= carry_goal
@@ -104,12 +114,60 @@ func _choose(p: Player, g: Game) -> int:
 		if l.owner != 0 or Rules.inside_cab(l.pos) or g.loot_burning(l.pos):
 			continue
 		var d: float = p.position.distance_to(l.pos)
-		var kg := Rules.loot_kg(l.kind)
+		var kg := g.loot_kg(id)
 		var score: float = Rules.loot_value(l.kind) * (0.4 + greed) / (d + 4.0) - kg * (1.0 - greed) * 0.4 + rng.randf() * 6.0
 		if score > best_score:
 			best_score = score
 			best = id
 	return best
+
+
+## The cable snapped: after a moment's shock, get to the nearest rail and hold it.
+func _hold_on(dt: float, p: Player, g: Game) -> void:
+	if not _snap_seen:
+		_snap_seen = true
+		_grip_delay = 0.25 if careful else rng.randf_range(0.2, 1.5)
+		_frozen = not careful and rng.randf() < 0.12
+	_grip_delay -= dt
+	if _frozen or _grip_delay > 0.0:
+		return
+	if Rules.can_hold_rail(p.position):
+		p.gripping = true
+		return
+	_walk(p, Rules.rail_spot(p.position), dt, g, true, 0.05)
+
+
+## Left behind: haunt the richest person, and use the powers now and then.
+func _ghost(dt: float, p: Player, g: Game) -> void:
+	_ghost_t -= dt
+	if _ghost_t > 0.0 or not g.haunts.has(p.pid):
+		return
+	_ghost_t = rng.randf_range(0.8, 1.8)
+	var target: int = g.haunts[p.pid]
+	if rng.randf() < 0.25:
+		var best := target
+		var best_v := g.carried_value(target) if g.players.has(target) else -1
+		for id in g.players:
+			if g.players[id].alive and g.carried_value(id) > best_v:
+				best_v = g.carried_value(id)
+				best = id
+		if best != target:
+			g.act_haunt(p, best)
+			return
+	if g.phase != "open":
+		if g.phase == "descent" and rng.randf() < 0.05:
+			g.act_ghost(p, "lights")
+		return
+	var t: Player = g.players.get(target)
+	if t == null:
+		return
+	var roll := rng.randf()
+	if g.time_left > 4.5 and g.time_left < 9.0 and g.ghost_used_floor != g.floor_now and roll < 0.25:
+		g.act_ghost(p, "button")
+	elif not Rules.inside_cab(t.true_pos()) and roll < 0.45:
+		g.act_ghost(p, "spook")
+	elif roll < 0.5:
+		g.act_ghost(p, "lights")
 
 
 func _walk(p: Player, target: Vector3, dt: float, g: Game, run: bool, arrive: float) -> void:

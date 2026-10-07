@@ -25,7 +25,17 @@ func _initialize() -> void:
 	check("outside: on the landing", not Rules.inside_cab(Vector3(0, 0, -0.5)))
 	check("outside: standing in the door line", not Rules.inside_cab(Vector3(0, 0, 0.1)))
 	check("heavy loot slows you, never below 45%", Rules.speed_factor(45.0) < 0.5 and Rules.speed_factor(500.0) >= 0.45)
+	check("snap drops half, rounded up", Rules.snap_drops(0) == 0 and Rules.snap_drops(1) == 1
+		and Rules.snap_drops(2) == 1 and Rules.snap_drops(3) == 2)
+	check("no rail in the middle of the cab", not Rules.can_hold_rail(Vector3(0, 0, 2)))
+	check("rail reachable against the left wall", Rules.can_hold_rail(Vector3(-1.6, 0, 2)))
+	check("rail reachable against the back wall", Rules.can_hold_rail(Vector3(0.3, 0, 3.6)))
+	check("no rail outside the cab", not Rules.can_hold_rail(Vector3(-1.6, 0, -0.5)))
+	for i in 40:
+		var spot := Vector3(rng.randf_range(-1.6, 1.6), 0, rng.randf_range(0.4, 3.6))
+		check("rail spot from %s can be held" % spot, Rules.can_hold_rail(Rules.rail_spot(spot)))
 	for room in Rules.ROOMS:
+		check("%s has a name and a hazard line" % room, Rules.ROOM_NAMES.has(room) and Rules.ROOM_HAZARDS.has(room))
 		for k in Rules.ROOM_LOOT[room]:
 			check("%s loot %s is in the catalogue" % [room, k], Rules.LOOT.has(k))
 	_rooms.call_deferred()

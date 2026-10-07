@@ -77,8 +77,32 @@ GALLERIES = [
         ("13_zoo_looting", "The gorilla is out and coming for whoever is nearest. Behind it, the crowd already back in the cab."),
         ("13_zoo_last_seconds", "The last seconds on the roof."),
     ]),
+    ("screens-spa", "Flooded Spa", "Hot tubs, loungers and a fountain. Two seconds after the doors open the water starts rising, up to 75 cm. Wading slows you, and loot the flood reaches is soaked and weighs half as much again, which counts against the cab's 800 kg.", [
+        ("11_spa_doors_open", "The doors open on the spa. Loot on the loungers stays dry longer than loot on the floor."),
+        ("11_spa_looting", "The flood is up. Every piece this player carries is wet, so it weighs more."),
+        ("11_spa_last_seconds", "The last seconds, wading back to the cab."),
+    ]),
+    ("screens-daycare", "Ball Pit Daycare", "A ball pit in the middle of the room hides loot: you only see it when you are standing next to it, and the balls slow you down. A toddler chases whoever outside is carrying the most, takes their top item and throws it back into the pit.", [
+        ("12_daycare_doors_open", "The doors open on the daycare. The pit has openings on every side."),
+        ("12_daycare_looting", "In the pit: a teddy bear only shows itself up close. The feed reports the toddler taking a marble cherub back."),
+        ("12_daycare_last_seconds", "The last seconds in the daycare."),
+    ]),
+    ("screens-vault", "Laser Vault", "Walls of deposit boxes, gold on velvet pedestals, a gold pile at the back. Three red beams sweep the room from back to front and back again, with one gap that wanders. Touch the beams and they knock an item out of your hands.", [
+        ("13_vault_doors_open", "The doors open on the vault."),
+        ("13_vault_looting", "The sweep comes toward the cab. Only the gap is safe, and the beams are too high to jump."),
+        ("13_vault_last_seconds", "The last seconds in the vault."),
+    ]),
+    ("screens-snap", "Cable snap", "Most rounds, the cable snaps once between floors. You have 2.2 seconds to reach a wall rail and hold E before the emergency brake bites. Anyone not holding on is thrown and drops half their loot on the cab floor.", [
+        ("20_cable_snap", "The cable has gone: the cab shakes, the lights stutter, and the prompt tells this player they are not at a rail yet."),
+        ("21_snap_jolt", "The brake bites. This player held on; the feed names three who did not."),
+    ]),
+    ("screens-ghosts", "Ghosts", "Anyone left behind becomes a ghost and haunts someone still alive, floating over their shoulder where everyone can see it. Three powers: kill the cab lights and floor clock for 3 seconds, press a floor button to take 3 seconds off the doors, or set the room's hazard on the person you haunt. If that person is left behind, the ghost scores 150.", [
+        ("30_left_behind", "Just left behind: the ghost panel appears and the camera moves to the person you now haunt."),
+        ("31_ghost_view", "A ghost's view: haunting Bram, with each power's state below."),
+        ("32_ghost_lights_out", "Lights out from the ghost's side: the living see the clock go dead."),
+    ]),
     ("screens-end", "The lobby", "After the last stop the cable gives and the cab drops to the ground floor. Whoever is still inside cashes in what they carry.", [
-        ("40_crash", "The cable snaps after the last stop: the display races to L and the cab shakes hardest."),
+        ("40_crash", "The brakes go after the last stop: the display races to L and the cab shakes hardest."),
         ("41_results", "The results: this round's haul, the session total, and who made it."),
     ]),
 ]

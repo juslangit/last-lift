@@ -10,8 +10,8 @@ mkdir -p "$LOGS"
 PORT_ARGS=""
 ROUNDS="${ROUNDS:-1}"
 
-"$G" --headless --path . -- --host --name=Host --bots=5 --autostart=3 --autopilot \
-	--rounds="$ROUNDS" --quit --log > "$LOGS/host.log" 2>&1 &
+"$G" --headless --path . -- --host --name=Host --bots=5 --autostart=3 --autopilot --snap=always \
+	${ROOMS:+--rooms=$ROOMS} --rounds="$ROUNDS" --quit --log > "$LOGS/host.log" 2>&1 &
 HOST=$!
 sleep 2
 "$G" --headless --path . -- --join=127.0.0.1 --name=Ana --autopilot --rounds="$ROUNDS" --quit --log > "$LOGS/ana.log" 2>&1 &
@@ -37,7 +37,10 @@ check "clients reached the lobby crash" "grep -q 'phase crash' $LOGS/ana.log && 
 check "clients picked up loot over the network" "grep -qE 'PICKUP (Ana|Ben) took' $LOGS/host.log"
 check "Ana's results match the host's" "[ \"\$(results $LOGS/host.log)\" = \"\$(results $LOGS/ana.log)\" ]"
 check "Ben's results match the host's" "[ \"\$(results $LOGS/host.log)\" = \"\$(results $LOGS/ben.log)\" ]"
+check "the cable snapped and the brake bit" "grep -q 'SNAP the cable' $LOGS/host.log && grep -q 'JOLT' $LOGS/host.log"
+check "clients felt the snap" "grep -q 'phase descent' $LOGS/ana.log"
 check "no script errors anywhere" "! grep -hE 'SCRIPT ERROR|Invalid|Nonexistent|Parse Error' $LOGS/*.log"
 echo
+echo "ghost powers used: $(grep -c 'GHOST ' $LOGS/host.log)   haunts scored: $(grep -c 'HAUNT ' $LOGS/host.log)   lost grips: $(grep -o 'JOLT [0-9]*' $LOGS/host.log | tr '\n' ' ')"
 results $LOGS/host.log
 exit $fail

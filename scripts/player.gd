@@ -22,6 +22,8 @@ var want_jump := false
 var stun := 0.0
 var shake := 0.0
 var shove_cool := 0.0
+var slow := 1.0                       # wading through the flood or the ball pit (set by the game)
+var gripping := false                 # holding the hand rail through a cable snap
 
 # camera (LOCAL only)
 var cam_yaw := PI                     # looking from the back of the cab toward the doors
@@ -131,8 +133,8 @@ func _physics_process(dt: float) -> void:
 		return
 	if mode == Mode.LOCAL:
 		_read_input()
-	var speed := (Rules.RUN_SPEED if want_run else Rules.WALK_SPEED) * Rules.speed_factor(carried_kg)
-	var target := move_dir.limit_length(1.0) * speed
+	var speed := (Rules.RUN_SPEED if want_run else Rules.WALK_SPEED) * Rules.speed_factor(carried_kg) * slow
+	var target := Vector3.ZERO if gripping else move_dir.limit_length(1.0) * speed
 	var flat := Vector3(velocity.x, 0, velocity.z)
 	if stun > 0.0:
 		flat = flat.lerp(Vector3.ZERO, 1.0 - exp(-2.0 * dt))
@@ -191,6 +193,9 @@ func _animate(dt: float) -> void:
 	Body.animate(model, _anim_speed, _walk_phase)
 	if stun > 0.0:
 		(model.get_node("Bob") as Node3D).rotation.x = sin(stun * 30.0) * 0.3
+	elif gripping:  # braced against the wall
+		(model.get_node("Bob") as Node3D).rotation.x = 0.25
+		(model.get_node("Bob") as Node3D).position.y = -0.12
 
 
 func knock(impulse: Vector3, stun_time: float) -> void:
@@ -225,7 +230,8 @@ func set_alive(v: bool) -> void:
 
 
 ## Redraw the tower of loot balanced on the player's head.
-func set_carried(ids: Array[int], kinds: Array[String]) -> void:
+## `kg` is the real total (wet loot weighs more); left out, it is worked out from the kinds.
+func set_carried(ids: Array[int], kinds: Array[String], kg := -1.0) -> void:
 	carried = ids
 	carried_kinds = kinds
 	carried_kg = 0.0
@@ -239,4 +245,6 @@ func set_carried(ids: Array[int], kinds: Array[String]) -> void:
 		var mi := Build.mesh(_stack, Build.loot_mesh(k), Vector3(0, y + size.y * s / 2.0, 0), Build.mat(Rules.LOOT[k][4], 0.45, 0.2))
 		mi.scale = Vector3.ONE * s
 		y += size.y * s
+	if kg >= 0.0:
+		carried_kg = kg
 	_label.position.y = 2.15 + y

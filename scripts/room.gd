@@ -26,6 +26,20 @@ var _gorilla_repath := 0.0
 var _fires: Array[Node3D] = []
 var _disco: OmniLight3D
 var _t := 0.0
+# ghosts: a spooked hazard goes for one person for a few seconds
+var _spook_id := 0
+var _spook_t := 0.0
+var _spook_new := false
+var _conga_off := Vector3.ZERO
+var _flare: Node3D                # fire: a flare-up under a spooked person
+var _flare_t := 0.0
+var _water: Node3D                # spa: its height is the water level
+var _fence: Node3D                # vault: z is the sweep, x the gap in the beams
+var _fence_dir := 1.0
+var _balls: MultiMeshInstance3D
+var _kid_rest := 0.0
+var _kid_path: PackedVector3Array = []
+var _kid_repath := 0.0
 
 const FIRE_ROWS := [-13.5, -10.5, -7.5, -4.5]   # back to front: the order they catch
 const FIRE_START := 3.0
@@ -34,6 +48,17 @@ const CONGA_LOOP := [Vector3(-3.2, 0, -5.2), Vector3(3.2, 0, -5.2), Vector3(3.2,
 const CONGA_SPEED := 2.3
 const GORILLA_SPEED := 3.4
 const GORILLA_RELEASE := 2.0
+const FLARE_RADIUS := 1.6
+const WATER_START := 2.0
+const WATER_RISE := 12.0          # seconds from dry to full
+const WATER_MAX := 0.75
+const FENCE_NEAR := -1.4          # the laser sweep turns back before it reaches the cab
+const FENCE_FAR := -15.2
+const FENCE_SPEED := 1.9
+const FENCE_GAP := 1.1            # half-width of the opening in the beams
+const PIT := Rect2(-4.0, -12.0, 8.0, 6.0)   # daycare ball pit, in (x, z)
+const KID_SPEED := 3.3
+const KID_RELEASE := 1.5
 
 
 static func create(room_kind: String, room_seed: int) -> Room:
@@ -48,6 +73,12 @@ static func create(room_kind: String, room_seed: int) -> Room:
 			r._build_office()
 		"fire":
 			r._build_fire()
+		"spa":
+			r._build_spa()
+		"vault":
+			r._build_vault()
+		"daycare":
+			r._build_daycare()
 		_:
 			r._build_zoo()
 	return r
@@ -178,6 +209,22 @@ func _build_fire() -> void:
 		Build.light(f, Vector3(-4, 1.4, 0), Color("ff7a1a"), 3.0, 7.0)
 		Build.light(f, Vector3(4, 1.4, 0), Color("ff7a1a"), 3.0, 7.0)
 		_fires.append(f)
+	# the flare-up a ghost can call down on someone; parked under the floor until then
+	_flare = Node3D.new()
+	_flare.position = Vector3(0, -50, 0)
+	add_child(_flare)
+	for i in 9:
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.0
+		cone.bottom_radius = _rng.randf_range(0.25, 0.4)
+		cone.height = _rng.randf_range(0.8, 1.6)
+		cone.radial_segments = 6
+		var a := i * TAU / 9.0
+		var r := 0.4 + (i % 3) * 0.4
+		Build.mesh(_flare, cone, Vector3(cos(a) * r, cone.height / 2.0, sin(a) * r), flame if i % 3 else core)
+	Build.light(_flare, Vector3(0, 1.2, 0), Color("ff7a1a"), 3.0, 6.0)
+	npcs.append(_flare)
+	_npc_vel.append(Vector3.ZERO)
 
 
 func _build_zoo() -> void:
@@ -251,6 +298,165 @@ func _build_zoo() -> void:
 	_npc_vel.append(Vector3.ZERO)
 
 
+func _build_spa() -> void:
+	_shell(Color("4f7f88"), Color("b9cfcc"))
+	_indoor_env(Color("dff3ff"), 0.42, Color("0d1416"))
+	var tile := Build.mat(Color("7fb8c0"), 0.3)
+	var wood := Build.mat(Color("a47148"), 0.7)
+	var cushion := Build.mat(Color("f6f1e7"), 0.9)
+	# two hot tubs: raised, solid, water steaming
+	for x in [-5.0, 5.0]:
+		Build.box(self, Vector3(3.0, 0.6, 3.0), Vector3(x, 0.3, -11.0), tile)
+		Build.nav_block(self, Vector3(3.0, 0.6, 3.0), Vector3(x, 0.3, -11.0))
+		Build.mesh(self, Build.box_mesh(Vector3(2.6, 0.02, 2.6)), Vector3(x, 0.61, -11.0), Build.mat(Color("38bdf8"), 0.05, 0.1, 0.3))
+		var mist := Build.mesh(self, Build.sphere_mesh(1.4, 0.35), Vector3(x, 0.9, -11.0), Build.mat(Color(1, 1, 1, 0.12), 1.0))
+		(mist.material_override as StandardMaterial3D).transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	# loungers along both walls, loot on the cushions (dry for longer than the floor)
+	for side in [-1, 1]:
+		for z in [-3.5, -6.5, -14.4]:
+			var x: float = 7.7 * side
+			Build.box(self, Vector3(0.9, 0.4, 1.9), Vector3(x, 0.2, z), wood)
+			Build.nav_block(self, Vector3(0.9, 0.4, 1.9), Vector3(x, 0.2, z))
+			Build.mesh(self, Build.box_mesh(Vector3(0.8, 0.08, 1.8)), Vector3(x, 0.44, z), cushion)
+			_point(x, 0.48, z + _rng.randf_range(-0.5, 0.5))
+	# a fountain in the middle, the cherub's old spot
+	Build.cyl(self, 0.9, 0.5, Vector3(0, 0.25, -7.5), tile)
+	Build.nav_block(self, Vector3(1.8, 0.5, 1.8), Vector3(0, 0.25, -7.5))
+	for i in 6:
+		_point(_rng.randf_range(-6.5, 6.5), 0.0, _rng.randf_range(-15.0, -2.5))
+	_point(0.0, 0.0, -14.8)
+	_point(_rng.randf_range(-2.0, 2.0), 0.0, -4.0)
+	for z in [-4.0, -10.0, -15.0]:
+		Build.light(self, Vector3(0, 3.2, z), Color("e6f6ff"), 1.3, 11.0, z == -10.0)
+	var sign := Build.label(self, "SERENITY SPA  ·  PLEASE WALK", Vector3(0, 2.7, BACK + 0.02), 110, Color("0e7490"), _font)
+	sign.pixel_size = 0.006
+	# the flood: one sheet of water that rises over the floor
+	_water = Node3D.new()
+	_water.position = Vector3(0, 0.02, 0)
+	add_child(_water)
+	var sheet := PlaneMesh.new()
+	sheet.size = Vector2(HALF_W * 2.0, -BACK + FRONT)
+	var wm := StandardMaterial3D.new()
+	wm.albedo_color = Color(0.12, 0.5, 0.68, 0.62)
+	wm.roughness = 0.05
+	wm.metallic = 0.2
+	wm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	Build.mesh(_water, sheet, Vector3(0, 0, (BACK + FRONT) / 2.0), wm)
+	npcs.append(_water)
+	_npc_vel.append(Vector3.ZERO)
+
+
+func _build_vault() -> void:
+	_shell(Color("2a2d33"), Color("3b4048"))
+	_indoor_env(Color("ffe8c2"), 0.45, Color("08080a"))
+	var steel := Build.mat(Color("8a9099"), 0.35, 0.8)
+	var gold := Build.mat(Color("eab308"), 0.3, 0.9, 0.2)
+	var velvet := Build.mat(Color("7f1d1d"), 0.9)
+	# walls of safe-deposit boxes
+	for side in [-1, 1]:
+		for j in 5:
+			for k in 14:
+				Build.mesh(self, Build.box_mesh(Vector3(0.04, 0.5, 0.95)), Vector3(side * (HALF_W - 0.02), 0.5 + j * 0.6, -1.2 - k * 1.05),
+					steel if (j + k) % 2 else Build.mat(Color("6b7280"), 0.4, 0.7))
+	# pedestals with velvet tops; loot sits on them
+	for p in [Vector3(-4.0, 0, -5.5), Vector3(4.0, 0, -5.5), Vector3(-4.0, 0, -12.0), Vector3(4.0, 0, -12.0), Vector3(0, 0, -9.0)]:
+		Build.box(self, Vector3(1.0, 0.9, 1.0), p + Vector3(0, 0.45, 0), steel)
+		Build.nav_block(self, Vector3(1.0, 0.9, 1.0), p + Vector3(0, 0.45, 0))
+		Build.mesh(self, Build.box_mesh(Vector3(0.9, 0.04, 0.9)), p + Vector3(0, 0.92, 0), velvet)
+		_point(p.x, 0.94, p.z)
+	# a gold pile at the back
+	for i in 22:
+		Build.mesh(self, Build.box_mesh(Vector3(0.36, 0.12, 0.18)),
+			Vector3(_rng.randf_range(-2.5, 2.5), 0.06 + (i % 4) * 0.12, -15.3 + _rng.randf_range(-0.3, 0.3)), gold,
+			Vector3(0, _rng.randf_range(-0.5, 0.5), 0))
+	for i in 7:
+		_point(_rng.randf_range(-7.5, 7.5), 0.0, _rng.randf_range(-14.5, -2.5))
+	_point(_rng.randf_range(-2.0, 2.0), 0.0, -14.3)
+	# the big round vault door, open, against the left wall
+	var door := Build.mesh(self, Build.cyl_mesh(1.5, 0.4, 20), Vector3(-HALF_W + 0.3, 1.6, -15.0), steel, Vector3(0, 0, PI / 2))
+	door.name = "VaultDoor"
+	for z in [-4.0, -9.0, -14.0]:
+		Build.light(self, Vector3(0, 3.2, z), Color("ffe1b0"), 1.0, 9.0, z == -9.0)
+	# the laser sweep: three red beams across the room, with one gap that wanders
+	_fence = Node3D.new()
+	_fence.position = Vector3(0, 0, FENCE_FAR)
+	add_child(_fence)
+	var beam := Build.mat(Color("ff2020"), 0.4, 0.0, 6.0)
+	for y in [0.3, 0.85, 1.4]:
+		for side in [-1, 1]:
+			var length := 20.0
+			Build.mesh(_fence, Build.box_mesh(Vector3(length, 0.035, 0.035)), Vector3(side * (FENCE_GAP + length / 2.0), y, 0), beam)
+	Build.light(_fence, Vector3(0, 0.9, 0), Color("ff2020"), 1.4, 5.0)
+	npcs.append(_fence)
+	_npc_vel.append(Vector3.ZERO)
+
+
+func _build_daycare() -> void:
+	_shell(Color("5b8fd6"), Color("f2c98a"))
+	_indoor_env(Color("fff7e6"), 0.42, Color("141210"))
+	var colors := [Color("ef4444"), Color("f59e0b"), Color("22c55e"), Color("3b82f6"), Color("ec4899"), Color("a855f7")]
+	# the ball pit: a low padded rim with an opening in the middle of each side
+	var rim := Build.mat(Color("f472b6"), 0.8)
+	var x0 := PIT.position.x
+	var x1 := PIT.end.x
+	var z0 := PIT.position.y
+	var z1 := PIT.end.y
+	var gap := 0.9
+	for z in [z0, z1]:
+		for half in [[x0, -gap], [gap, x1]]:
+			var w: float = half[1] - half[0]
+			Build.box(self, Vector3(w, 0.35, 0.25), Vector3((half[0] + half[1]) / 2.0, 0.175, z), rim)
+	for x in [x0, x1]:
+		var zm := (z0 + z1) / 2.0
+		for half in [[z0, zm - gap], [zm + gap, z1]]:
+			var d: float = half[1] - half[0]
+			Build.box(self, Vector3(0.25, 0.35, d), Vector3(x, 0.175, (half[0] + half[1]) / 2.0), rim)
+	_balls = MultiMeshInstance3D.new()
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = Build.sphere_mesh(0.14)
+	mm.instance_count = 1100
+	for i in mm.instance_count:
+		var pos := Vector3(_rng.randf_range(x0 + 0.2, x1 - 0.2), _rng.randf_range(0.08, 0.4), _rng.randf_range(z0 + 0.2, z1 - 0.2))
+		mm.set_instance_transform(i, Transform3D(Basis(), pos))
+		mm.set_instance_color(i, colors[i % colors.size()])
+	_balls.multimesh = mm
+	var bm := StandardMaterial3D.new()
+	bm.vertex_color_use_as_albedo = true
+	bm.roughness = 0.35
+	_balls.material_override = bm
+	add_child(_balls)
+	# loot buried in the pit
+	for i in 6:
+		_point(_rng.randf_range(x0 + 0.6, x1 - 0.6), 0.0, _rng.randf_range(z0 + 0.6, z1 - 0.6))
+	# toy shelves along the back wall, loot on top
+	var shelf := Build.mat(Color("fde68a"), 0.7)
+	for x in [-6.5, 6.5]:
+		Build.box(self, Vector3(2.4, 0.9, 0.7), Vector3(x, 0.45, -15.2), shelf)
+		Build.nav_block(self, Vector3(2.4, 0.9, 0.7), Vector3(x, 0.45, -15.2))
+		_point(x + _rng.randf_range(-0.8, 0.8), 0.9, -15.1)
+	for i in 5:
+		var side := -1.0 if i % 2 else 1.0
+		_point(side * _rng.randf_range(5.0, 8.0), 0.0, _rng.randf_range(-14.0, -2.5))
+	_point(_rng.randf_range(-2.0, 2.0), 0.0, -14.0)
+	# play mats and big soft blocks
+	for i in 10:
+		var c: Color = colors[i % colors.size()]
+		Build.mesh(self, Build.box_mesh(Vector3(1.4, 0.02, 1.4)), Vector3(-7.6 + (i % 2) * 15.2, 0.01, -2.0 - i * 1.4), Build.mat(c.lightened(0.3), 0.9))
+	for z in [-4.0, -9.0, -14.0]:
+		Build.light(self, Vector3(0, 3.2, z), Color("fff4dd"), 1.3, 11.0, z == -9.0)
+	var sign := Build.label(self, "LITTLE STARS DAYCARE", Vector3(0, 2.7, BACK + 0.02), 120, Color("db2777"), _font)
+	sign.pixel_size = 0.006
+	# the toddler: small, fast enough, wants whatever you are holding
+	var kid := Body.person(Color("fbbf24"), Body.SKINS[0], Color("38bdf8"))
+	kid.scale = Vector3.ONE * 0.55
+	kid.position = Vector3(-7.0, 0, -14.0)
+	add_child(kid)
+	npcs.append(kid)
+	_npc_vel.append(Vector3.ZERO)
+
+
 func _pen(x0: float, x1: float, z0: float, z1: float, m: Material, side: String) -> void:
 	var h := 1.1
 	Build.box(self, Vector3(x1 - x0, h, 0.1), Vector3((x0 + x1) / 2.0, h / 2.0, z0), m)
@@ -267,15 +473,22 @@ func _pen(x0: float, x1: float, z0: float, z1: float, m: Material, side: String)
 
 # --- the hazard ---------------------------------------------------------------------------
 
-## Host only. `people` is [{id, pos, out}] for everyone alive; `t` is seconds since the doors
-## opened. Returns hits: [{id, impulse, stun, drop}].
+## Host only. `people` is [{id, pos, out, value}] for everyone alive; `t` is seconds since the
+## doors opened. Returns hits: [{id, impulse, stun, drop, sound}] (+ "steal": the toddler).
 func server_tick(dt: float, t: float, people: Array, nav_map: RID) -> Array:
 	_t = t
 	var hits := []
 	for k in _cool.keys():
 		_cool[k] -= dt
+	_spook_t = maxf(_spook_t - dt, 0.0)
+	var spooked := _spook_target(people)
 	match kind:
 		"office":
+			var want := Vector3.ZERO
+			if not spooked.is_empty():
+				want = spooked.pos - Vector3(0, 0, -9.0)
+				want.y = 0
+			_conga_off = _conga_off.move_toward(want, dt * 4.0)
 			_place_conga(t)
 			for p in people:
 				if not p.out or _cool.get(p.id, 0.0) > 0.0:
@@ -292,13 +505,46 @@ func server_tick(dt: float, t: float, people: Array, nav_map: RID) -> Array:
 		"fire":
 			var s := clampi(int(floor((t - FIRE_START) / FIRE_EVERY)) + 1, 0, FIRE_ROWS.size()) if t >= FIRE_START else 0
 			stage = s
+			if _spook_new and not spooked.is_empty():
+				_flare_t = Rules.SPOOK_TIME
+				_flare.position = Vector3(spooked.pos.x, 0, minf(spooked.pos.z, -1.2))
+			_flare_t = maxf(_flare_t - dt, 0.0)
+			if _flare_t <= 0.0:
+				_flare.position.y = -50.0
 			for p in people:
 				if p.out and burning(p.pos) and _cool.get(p.id, 0.0) <= 0.0:
 					_cool[p.id] = 1.2
 					hits.append({"id": p.id, "impulse": Vector3(0, 3.0, 8.0), "stun": 0.4, "drop": 1, "sound": "slam"})
 		"zoo":
-			hits = _gorilla_tick(dt, t, people, nav_map)
+			hits = _gorilla_tick(dt, t, people, nav_map, spooked)
+		"spa":
+			_water.position.y = 0.02 + clampf((t - WATER_START) / WATER_RISE, 0.0, 1.0) * WATER_MAX
+			if _spook_new and not spooked.is_empty():
+				# a surge: the water throws them away from the cab
+				hits.append({"id": spooked.id, "impulse": Vector3(_rng.randf_range(-2, 2), 3.0, -8.0), "stun": 0.8,
+					"drop": 1, "sound": "slam"})
+		"vault":
+			hits = _fence_tick(dt, people, spooked)
+		"daycare":
+			hits = _kid_tick(dt, t, people, nav_map, spooked)
+	_spook_new = false
 	return hits
+
+
+## A ghost sets this room's hazard on one person for a few seconds. Host only.
+func spook(pid: int) -> void:
+	_spook_id = pid
+	_spook_t = Rules.SPOOK_TIME
+	_spook_new = true
+
+
+func _spook_target(people: Array) -> Dictionary:
+	if _spook_t <= 0.0:
+		return {}
+	for p in people:
+		if p.id == _spook_id and p.out:
+			return p
+	return {}
 
 
 func burning(pos: Vector3) -> bool:
@@ -307,7 +553,126 @@ func burning(pos: Vector3) -> bool:
 	for i in stage:
 		if absf(pos.z - FIRE_ROWS[i]) < 1.55 and pos.z < -0.5:
 			return true
+	if _flare and _flare.position.y > -1.0 and pos.z < -0.5:
+		if Vector2(pos.x - _flare.position.x, pos.z - _flare.position.z).length() < FLARE_RADIUS:
+			return true
 	return false
+
+
+## Spa: how high the flood is (0 when this room has no water).
+func water_level() -> float:
+	return _water.position.y if _water else 0.0
+
+
+## How much wading slows you here: the flood, or the ball pit. 1 = not at all.
+func wade(pos: Vector3) -> float:
+	if pos.z > FRONT:
+		return 1.0
+	match kind:
+		"spa":
+			var depth := clampf(water_level() - pos.y, 0.0, WATER_MAX)
+			return 1.0 - depth * 0.6
+		"daycare":
+			return 0.7 if in_pit(pos) else 1.0
+	return 1.0
+
+
+func in_pit(pos: Vector3) -> bool:
+	return kind == "daycare" and PIT.has_point(Vector2(pos.x, pos.z))
+
+
+## Where the toddler drops what it took: somewhere in the pit. Host only.
+func pit_spot() -> Vector3:
+	return Vector3(_rng.randf_range(PIT.position.x + 0.6, PIT.end.x - 0.6), 0.0, _rng.randf_range(PIT.position.y + 0.6, PIT.end.y - 0.6))
+
+
+func _fence_tick(dt: float, people: Array, spooked: Dictionary) -> Array:
+	var hits := []
+	var f := _fence
+	var speed := FENCE_SPEED
+	var gap_want := sin(_t * 0.7) * 5.5
+	if not spooked.is_empty():
+		# the sweep goes for them, and the gap runs to the far side
+		_fence_dir = signf(spooked.pos.z - f.position.z) if absf(spooked.pos.z - f.position.z) > 0.2 else _fence_dir
+		speed = 4.0
+		gap_want = -signf(spooked.pos.x) * 6.0 if absf(spooked.pos.x) > 0.3 else 6.0
+	f.position.z += _fence_dir * speed * dt
+	if f.position.z > FENCE_NEAR:
+		f.position.z = FENCE_NEAR
+		_fence_dir = -1.0
+	elif f.position.z < FENCE_FAR:
+		f.position.z = FENCE_FAR
+		_fence_dir = 1.0
+	f.position.x = move_toward(f.position.x, gap_want, dt * (6.0 if not spooked.is_empty() else 2.5))
+	for p in people:
+		if not p.out or _cool.get(p.id, 0.0) > 0.0:
+			continue
+		if laser_hits(p.pos):
+			_cool[p.id] = 1.2
+			hits.append({"id": p.id, "impulse": Vector3(0, 2.0, _fence_dir * 5.0), "stun": 0.3, "drop": 1, "sound": "buzzer"})
+	return hits
+
+
+## Vault: is someone standing at `pos` in the beams right now?
+func laser_hits(pos: Vector3) -> bool:
+	if kind != "vault" or _fence == null or pos.z > -0.5:
+		return false
+	return absf(pos.z - _fence.position.z) < 0.3 and absf(pos.x - _fence.position.x) > FENCE_GAP - 0.3 and pos.y < 1.5
+
+
+func _kid_tick(dt: float, t: float, people: Array, nav_map: RID, spooked: Dictionary) -> Array:
+	var kid := npcs[0]
+	if t < KID_RELEASE:
+		Body.animate(kid, 0.0, 0.0)
+		return []
+	if _kid_rest > 0.0:
+		_kid_rest -= dt
+		Body.animate(kid, 0.0, t * 10.0)
+		return []
+	# chase whoever outside is carrying the most; a spooked person first
+	var target := {}
+	if not spooked.is_empty():
+		target = spooked
+	else:
+		var best := 0
+		for p in people:
+			if p.out and p.value > best:
+				best = p.value
+				target = p
+	var goal := Vector3(PIT.get_center().x, 0, PIT.get_center().y) if target.is_empty() else (target.pos as Vector3)
+	goal.z = minf(goal.z, -0.8)
+	var speed := KID_SPEED * (1.4 if not spooked.is_empty() else 1.0)
+	_kid_repath -= dt
+	if _kid_repath <= 0.0 and nav_map.is_valid():
+		_kid_repath = 0.4
+		_kid_path = NavigationServer3D.map_get_path(nav_map, kid.position, goal, true)
+	var step := goal
+	while _kid_path.size() > 0 and Vector2(_kid_path[0].x - kid.position.x, _kid_path[0].z - kid.position.z).length() < 0.3:
+		_kid_path.remove_at(0)
+	if _kid_path.size() > 0:
+		step = _kid_path[0]
+	var dir := step - kid.position
+	dir.y = 0
+	if dir.length() > 0.05:
+		dir = dir.normalized()
+		kid.position += dir * speed * dt
+		kid.rotation.y = lerp_angle(kid.rotation.y, atan2(-dir.x, -dir.z), 0.25)
+	kid.position.y = 0.0
+	kid.position.z = minf(kid.position.z, -0.8)
+	Body.animate(kid, speed * 1.5, t * 14.0)
+	var hits := []
+	for p in people:
+		if not p.out or p.value <= 0 or _cool.get(p.id, 0.0) > 0.0:
+			continue
+		var d: Vector3 = p.pos - kid.position
+		d.y = 0
+		if d.length() < 0.9:
+			_cool[p.id] = 2.0
+			_kid_rest = 1.5
+			hits.append({"id": p.id, "impulse": d.normalized() * 3.0 + Vector3.UP * 1.5, "stun": 0.4, "drop": 0,
+				"steal": true, "sound": "pickup"})
+			break
+	return hits
 
 
 func _place_conga(t: float) -> void:
@@ -325,13 +690,15 @@ func _place_conga(t: float) -> void:
 			i += 1
 		var a: Vector3 = CONGA_LOOP[i]
 		var b: Vector3 = CONGA_LOOP[(i + 1) % CONGA_LOOP.size()]
-		var pos := a.lerp(b, s / lens[i])
+		var pos := a.lerp(b, s / lens[i]) + _conga_off
+		pos.x = clampf(pos.x, -HALF_W + 0.5, HALF_W - 0.5)
+		pos.z = clampf(pos.z, BACK + 0.5, -1.0)
 		npcs[k].position = pos
 		npcs[k].rotation.y = atan2(-(b - a).x, -(b - a).z) + sin(t * 8.0 + k) * 0.25
 		Body.animate(npcs[k], CONGA_SPEED, t * 9.0 + k)
 
 
-func _gorilla_tick(dt: float, t: float, people: Array, nav_map: RID) -> Array:
+func _gorilla_tick(dt: float, t: float, people: Array, nav_map: RID, spooked: Dictionary) -> Array:
 	var g := npcs[0]
 	if t < GORILLA_RELEASE:
 		Body.animate(g, 0.0, 0.0)
@@ -353,6 +720,8 @@ func _gorilla_tick(dt: float, t: float, people: Array, nav_map: RID) -> Array:
 		if d < best:
 			best = d
 			target = p.pos
+	if not spooked.is_empty():
+		target = spooked.pos
 	if target == Vector3.INF:
 		target = Vector3(0, 0, -13.5)
 	target.z = minf(target.z, -0.8)
@@ -369,7 +738,7 @@ func _gorilla_tick(dt: float, t: float, people: Array, nav_map: RID) -> Array:
 	dir.y = 0
 	if dir.length() > 0.05:
 		dir = dir.normalized()
-		g.position += dir * GORILLA_SPEED * dt
+		g.position += dir * GORILLA_SPEED * (1.35 if not spooked.is_empty() else 1.0) * dt
 		g.rotation.y = lerp_angle(g.rotation.y, atan2(-dir.x, -dir.z), 0.2)
 	g.position.y = 0.0
 	g.position.z = minf(g.position.z, -0.8)

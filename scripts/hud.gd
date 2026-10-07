@@ -47,6 +47,13 @@ var _next_btn: Button
 var _pause: PanelContainer
 var _spectate: Label
 var _last_tick := -1
+var _hands: VBoxContainer
+var _ghost: PanelContainer
+var _ghost_who: Label
+var _ghost_powers: Array[Label] = []
+var _ghost_msg: Label
+var _ghost_msg_t := 0.0
+var _ghost_pts: Label
 
 
 func _ready() -> void:
@@ -61,6 +68,7 @@ func _ready() -> void:
 	_build_lobby()
 	_build_results()
 	_build_pause()
+	_build_ghost()
 
 
 func _place(c: Control, preset: Control.LayoutPreset, offset := Vector2.ZERO) -> Control:
@@ -136,6 +144,7 @@ func _build_bottom() -> void:
 	_place(bl, Control.PRESET_BOTTOM_LEFT)
 
 	var br := VBoxContainer.new()
+	_hands = br
 	br.alignment = BoxContainer.ALIGNMENT_END
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
@@ -259,6 +268,87 @@ func _build_results() -> void:
 	v.add_child(row)
 	_place(_results, Control.PRESET_CENTER)
 	_results.visible = false
+
+
+func _build_ghost() -> void:
+	_ghost = UI.panel()
+	_ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	_ghost.add_child(v)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 24)
+	top.add_child(UI.label("GHOST", 40, Color("bfe3ff"), UI.display))
+	_ghost_who = UI.label("", 32, UI.INK, UI.bold)
+	_ghost_who.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	top.add_child(_ghost_who)
+	v.add_child(top)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	for i in 3:
+		var box := UI.panel()
+		box.custom_minimum_size = Vector2(300, 0)
+		var l := UI.label("", 24, UI.INK, UI.bold)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		box.add_child(l)
+		row.add_child(box)
+		_ghost_powers.append(l)
+	v.add_child(row)
+	_ghost_msg = UI.label("", 24, UI.LED, UI.bold)
+	_ghost_msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(_ghost_msg)
+	_ghost_pts = UI.label("", 26, UI.BRASS, UI.bold)
+	v.add_child(_ghost_pts)
+	v.add_child(UI.label("Click or Tab: next person  ·  Right-click: back  ·  Mouse: look around", 20, UI.MUTED))
+	_anchor(_ghost, Control.PRESET_CENTER_BOTTOM, -490, -300, 490, -28)
+	_ghost.visible = false
+
+
+## A ghost power was refused: say why, briefly, in the ghost panel.
+func ghost_says(text: String) -> void:
+	_ghost_msg.text = text
+	_ghost_msg_t = 2.5
+
+
+func _update_ghost(g: Game) -> bool:
+	var lp := g.local_player()
+	var on := lp != null and not lp.alive and g.haunts.has(g.me) \
+		and g.phase != "lobby" and g.phase != "results"
+	_ghost.visible = on
+	if not on:
+		return false
+	var t := g.my_haunt()
+	var who: String = g.info[t].name if g.info.has(t) else "nobody"
+	_ghost_who.text = "Haunting  %s" % who.to_upper()
+	var target_in := t != 0 and Rules.inside_cab(g.players[t].position)
+	var states := []
+	var cd: float = g.ghost_cd.get("lights", 0.0)
+	states.append(["[1]  LIGHTS OUT", "dark now" if g.cab.blackout > 0.0 else ("%d s" % ceili(cd) if cd > 0.0 else "ready")])
+	var b := "ready  −%d s" % int(Rules.BUTTON_CUT)
+	if g.phase != "open":
+		b = "doors shut"
+	elif g.ghost_used_floor == g.floor_now:
+		b = "used this floor"
+	elif g.presses >= Rules.BUTTON_PER_FLOOR:
+		b = "panel jammed"
+	elif g.time_left <= Rules.BUTTON_MIN_LEFT + 0.5:
+		b = "too late"
+	states.append(["[2]  PRESS A BUTTON", b])
+	cd = g.ghost_cd.get("spook", 0.0)
+	var sp := "ready"
+	if cd > 0.0:
+		sp = "%d s" % ceili(cd)
+	elif g.phase != "open":
+		sp = "doors shut"
+	elif target_in:
+		sp = "%s is in the cab" % who
+	states.append(["[3]  SPOOK THE ROOM", sp])
+	for i in 3:
+		_ghost_powers[i].text = "%s\n%s" % states[i]
+		var ready: bool = states[i][1].begins_with("ready")
+		_ghost_powers[i].add_theme_color_override("font_color", UI.SAFE if ready else UI.MUTED)
+	_ghost_pts.text = "Haunt points  %d   ·   +%d if %s is left behind" % [g.ghost_pts.get(g.me, 0), Rules.HAUNT_POINTS, who]
+	return true
 
 
 func _build_pause() -> void:
@@ -387,7 +477,10 @@ func show_results(rows: Array) -> void:
 		_results_grid.add_child(UI.label(r[1] + ("  ← you" if you else ""), 30, UI.LED if you else UI.INK, UI.bold))
 		_results_grid.add_child(UI.label(str(r[2]), 30, UI.INK, UI.bold))
 		_results_grid.add_child(UI.label(str(r[3]), 30, UI.INK, UI.bold))
-		_results_grid.add_child(UI.label("made it" if r[4] else "left behind", 26, UI.SAFE if r[4] else UI.DANGER, UI.semi))
+		var status := "made it" if r[4] else "left behind"
+		if r.size() > 5 and r[5] > 0:
+			status += "  ·  haunted +%d" % r[5]
+		_results_grid.add_child(UI.label(status, 26, UI.SAFE if r[4] else UI.DANGER, UI.semi))
 	_results_title.text = "ROUND %d · LOBBY!" % game.round_no
 	_next_btn.visible = game.multiplayer.is_server()
 	_results.visible = true
@@ -417,7 +510,9 @@ func update_hud(dt: float) -> void:
 	if game == null:
 		return
 	var g := game
-	_floor.text = g.cab.led_in.text
+	var lp0 := g.local_player()
+	var dark := g.cab.blackout > 0.0 and lp0 != null and lp0.alive
+	_floor.text = "--" if dark else g.cab.led_in.text
 	var showing_room := g.phase == "open" or g.phase == "closing"
 	_room.text = Rules.ROOM_NAMES.get(g.room_kind, "") if showing_room else ("The lobby" if g.phase == "results" else "In the shaft")
 	_hazard.text = Rules.ROOM_HAZARDS.get(g.room_kind, "") if showing_room else ""
@@ -426,10 +521,17 @@ func update_hud(dt: float) -> void:
 			_doors.text = "DOORS SEALED"
 			_doors.add_theme_color_override("font_color", UI.INK)
 		"descent":
-			_doors.text = "FALLING"
-			_doors.add_theme_color_override("font_color", UI.INK)
+			if g.snap_active():
+				_doors.text = "CABLE SNAPPED!  HOLD A RAIL  %.1f" % g.snap_t
+				_doors.add_theme_color_override("font_color", UI.DANGER)
+			else:
+				_doors.text = "FALLING"
+				_doors.add_theme_color_override("font_color", UI.INK)
 		"open":
-			if g.waiting_weight:
+			if dark:
+				_doors.text = "LIGHTS OUT  ·  CLOCK DEAD"
+				_doors.add_theme_color_override("font_color", UI.DANGER)
+			elif g.waiting_weight:
 				_doors.text = "TOO HEAVY! THROW SOMETHING OUT"
 				_doors.add_theme_color_override("font_color", UI.DANGER)
 			else:
@@ -468,13 +570,19 @@ func update_hud(dt: float) -> void:
 	for i in Rules.SLOTS:
 		if lp and i < lp.carried_kinds.size():
 			var k := lp.carried_kinds[i]
-			_slots[i].text = "%s\n%d pts · %s kg" % [Rules.loot_name(k), Rules.loot_value(k), Rules.kg_text(k)]
+			_slots[i].text = "%s\n%d pts · %s" % [Rules.loot_name(k), Rules.loot_value(k), g.kg_text(lp.carried[i])]
 			_slot_boxes[i].modulate = Color.WHITE
 		else:
 			_slots[i].text = "empty"
 			_slot_boxes[i].modulate = Color(1, 1, 1, 0.5)
 	var it := g.interact_target()
 	_prompt.text = ("[E]  " + it.text) if it.type == "loot" or it.type == "hold" else it.get("text", "")
+	var ghosting := _update_ghost(g)
+	_hands.visible = not ghosting
+	_spectate.visible = lp != null and not lp.alive and not ghosting and g.phase != "lobby" and g.phase != "results"
+	_ghost_msg_t -= dt
+	if _ghost_msg_t <= 0.0:
+		_ghost_msg.text = ""
 	_big_t -= dt
 	_big.modulate.a = clampf(_big_t / 0.6, 0.0, 1.0)
 	_flash.color.a = maxf(_flash.color.a - dt * 1.2, 0.0)

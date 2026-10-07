@@ -5,6 +5,7 @@ extends Node
 ## Play with friends (a 4-digit room code or a Steam invite; same-Wi-Fi by IP as a fallback).
 ## Command line (after --):  --host  --join=IP  --name=X  --bots=N  --autostart[=humans]
 ##                           --autopilot  --rounds=N  --quit  --rooms=office,fire,zoo  --log  --nosteam
+##                           --snap=always|never
 ##                           --quickplay  --room  --code=1234   (press that menu button on start)
 
 var game: Game
@@ -28,6 +29,8 @@ func _ready() -> void:
 	Lobby.status.connect(func(t): _say(t, UI.INK))
 	if Net.opts.has("shots"):
 		add_child(load("res://dev/looks/shots.gd").new())
+	if Net.opts.has("probe"):  # a check that drives a real game: dev/checks/<name>.gd
+		add_child(load("res://dev/checks/%s.gd" % Net.opts["probe"]).new())
 	if Net.flag("host"):
 		var err := Net.host()
 		if err != "":
@@ -57,6 +60,7 @@ func _inputs() -> void:
 		"move_left": [KEY_A, KEY_LEFT], "move_right": [KEY_D, KEY_RIGHT],
 		"run": [KEY_SHIFT], "jump": [KEY_SPACE], "interact": [KEY_E], "drop": [KEY_Q],
 		"pause": [KEY_ESCAPE], "start": [KEY_ENTER, KEY_KP_ENTER],
+		"ghost_lights": [KEY_1], "ghost_button": [KEY_2], "ghost_spook": [KEY_3], "haunt_next": [KEY_TAB],
 	}
 	for action in keys:
 		if not InputMap.has_action(action):
@@ -65,11 +69,12 @@ func _inputs() -> void:
 			var ev := InputEventKey.new()
 			ev.physical_keycode = k
 			InputMap.action_add_event(action, ev)
-	if not InputMap.has_action("shove"):
-		InputMap.add_action("shove")
-		var mb := InputEventMouseButton.new()
-		mb.button_index = MOUSE_BUTTON_LEFT
-		InputMap.action_add_event("shove", mb)
+	for pair in [["shove", MOUSE_BUTTON_LEFT], ["haunt_prev", MOUSE_BUTTON_RIGHT]]:
+		if not InputMap.has_action(pair[0]):
+			InputMap.add_action(pair[0])
+			var mb := InputEventMouseButton.new()
+			mb.button_index = pair[1]
+			InputMap.action_add_event(pair[0], mb)
 
 
 func _start_game() -> void:
