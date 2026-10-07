@@ -104,7 +104,7 @@ func _build_top() -> void:
 	v.add_child(_hazard)
 	_place(tl, Control.PRESET_TOP_LEFT)
 
-	_doors = UI.shadowed(UI.label("", 46, UI.INK, UI.display))
+	_doors = UI.shadowed(UI.label("", 50, UI.INK, UI.bold))  # Bungee's 7 reads as "?"
 	_doors.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_anchor(_doors, Control.PRESET_CENTER_TOP, -600, 30, 600, 90)
 	_spectate = UI.shadowed(UI.label("CAM 01   ● REC", 30, UI.DANGER, UI.bold))
@@ -205,7 +205,7 @@ func _build_lobby() -> void:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
 	_lobby.add_child(v)
-	_room_title = UI.label("THE LOBBY", 44, UI.LED, UI.display)
+	_room_title = UI.label("THE LOBBY", 50, UI.LED, UI.bold)  # room codes must read clearly
 	v.add_child(_room_title)
 	_room_sub = UI.label("Everyone in the cab. Floor 40.", 24, UI.MUTED)
 	_room_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -251,7 +251,7 @@ func _build_results() -> void:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 14)
 	_results.add_child(v)
-	_results_title = UI.label("LOBBY!", 64, UI.LED, UI.display)
+	_results_title = UI.label("LOBBY!", 68, UI.LED, UI.bold)
 	_results_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(_results_title)
 	_results_grid = GridContainer.new()
